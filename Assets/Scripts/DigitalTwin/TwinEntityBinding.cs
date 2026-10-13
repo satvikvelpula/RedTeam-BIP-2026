@@ -44,10 +44,22 @@ namespace DigitalTwin
         /// <summary>The message a "press" in VR should produce (e.g. flip on/off).</summary>
         protected abstract TwinStateMessage BuildSimulatedToggle();
 
-        /// <summary>Called by VRPointer / mouse click. Routes through the receiver so everything updates consistently.</summary>
+        /// <summary>
+        /// Called by VR trigger / mouse click / test keys. With Home Assistant connected the press goes to the
+        /// REAL device (TwinCommandRouter) and the twin follows the real state; otherwise it is simulated.
+        /// </summary>
         public void SimulateInteract()
         {
             if (!allowSimulatedInteraction || string.IsNullOrEmpty(entityId)) return;
+            var router = TwinCommandRouter.Instance;
+            if (router != null && router.TryHandlePress(this)) return;
+            SimulateLocal();
+        }
+
+        /// <summary>Toggle only inside the twin (no real device). Routes through the receiver so everything updates consistently.</summary>
+        public void SimulateLocal()
+        {
+            if (string.IsNullOrEmpty(entityId)) return;
             var m = BuildSimulatedToggle();
             if (m == null) return;
             if (_receiver != null) _receiver.Inject(m); else { Current = m; Apply(m); }

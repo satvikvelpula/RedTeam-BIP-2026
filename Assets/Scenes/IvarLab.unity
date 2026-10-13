@@ -18922,7 +18922,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5da3019e397b43419cbeccead9c03ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: light.pendant_lamp
+  entityId: light.aqara_dimmer_switch_h2
   allowSimulatedInteraction: 1
   lights:
   - {fileID: 2095567924}

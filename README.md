@@ -59,3 +59,40 @@ Open `web/ivar-lab.html` in a browser for an interactive view with an equipment 
 ## Team
 
 RedTeam, BIP 2026 (TalTech, Tallinn).
+
+## Unity digital twin — live with the real stand
+
+Branch `integrate/scene` is the Unity project (Unity **2022.3.62f3**, scene `Assets/Scenes/IvarLab.unity`).
+It contains use case 1 (lamp), use case 2 (window sensor logger) and use case 4 (motion demo).
+
+**Real stand → VR.** `HomeAssistantClient` (on the `DigitalTwin` object) subscribes to Home Assistant over
+WebSocket and every binding mirrors its entity: lamp on/off + brightness, window open/closed, motion,
+roller shade position, LED strip colour. `scripts/ha_twin_logger.py --udp 127.0.0.1:5005` can still feed the
+same scene over UDP (port 5005), e.g. for logging.
+
+**VR → real stand.** `TwinCommandRouter` (created automatically at Play) sends every press (VR trigger/grip,
+mouse click, test keys 1-7) to the real device while Home Assistant is connected, and the twin then shows the
+state Home Assistant reports back. Without a connection, presses are simulated as before.
+
+| Press in VR on | Goes to | Real result |
+|---|---|---|
+| Pendant lamp / KNX switch (use case 1) | `use_case_1/lamp_api.py serve` → HA `light.aqara_dimmer_switch_h2` (falls back to HA directly) | lamp on/off |
+| PIR sensor (use case 4) | `scripts/motion_demo.py --http 8766` → `POST /scene` | shade down, strip red, jazz; shade up after the delay |
+| Roller shade | HA `cover.open_cover` / `close_cover` | shade moves; `motion_demo.py` switches the strip red/green |
+| LED strip | HA `light.turn_on` / `turn_off` | strip on/off |
+| Window sensor (use case 2) | nothing — it is a real sensor | open/close the real window, the twin follows |
+
+`TwinCommandRouter.SetLampBrightness(0-255)` and `SetShadePosition(entity, 0-100)` are there for sliders.
+
+### Running it in the lab
+
+1. Token: Unity menu **IVAR > Home Assistant Settings** → paste the long-lived token → *Save + Test*
+   (or set `HA_TOKEN` as an environment variable before starting Unity Hub). URL `http://homeassistant.local:8123`.
+2. Helper scripts (PowerShell, from the repo root, `pip install websockets` once):
+   ```powershell
+   $env:HA_URL="http://homeassistant.local:8123"; $env:HA_TOKEN="<token>"
+   python use_case_1/lamp_api.py serve                                  # use case 1, port 8765
+   python scripts/motion_demo.py --url $env:HA_URL --http 8766          # use case 4
+   python scripts/ha_twin_logger.py --url $env:HA_URL --udp 127.0.0.1:5005   # use case 2 (optional log)
+   ```
+3. Press Play. The status panel shows *Presses → real stand* and whether lamp_api / motion_demo are running.

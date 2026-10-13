@@ -13,6 +13,8 @@ and calls HA services over REST. Nothing in the lab's HA config is changed.
   shade "closed"                   -> jazz radio on the speaker (--speaker), quiet volume
   shade "open"/"opening"/"closing" -> jazz stops
   press Enter in this window       -> run the "motion" scene by hand (for a busy room)
+  POST http://127.0.0.1:8766/scene -> same as Enter (with --http 8766; the Unity twin calls this
+                                      when you press the PIR sensor in VR)
   Ctrl+C                           -> restore the strip and the shade to how they were at start
 
 If motion is already "on" when the script starts, the scene runs right away.
@@ -21,6 +23,7 @@ Usage (PowerShell, same window/token as the logger):
   $env:HA_TOKEN="<token>"
   python motion_demo.py --url http://homeassistant.local:8123
 Options: --motion, --rgb, --green, --cover to use other entities; --off-delay seconds.
+With the Unity twin:  python motion_demo.py --url http://homeassistant.local:8123 --http 8766
 
 Which light is which strip? Run
   python motion_demo.py --url http://homeassistant.local:8123 --identify
@@ -38,6 +41,7 @@ import json
 import os
 import sys
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import time
 import urllib.error
 import urllib.request
@@ -240,10 +244,42 @@ def start_keyboard(loop, queue):
     threading.Thread(target=reader, daemon=True).start()
 
 
+def start_http(loop, queue, port):
+    """Tiny local control API for the Unity twin: POST /scene = press Enter, GET /health."""
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *a):
+            pass
+
+        def _reply(self, code, body):
+            raw = json.dumps(body).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            self._reply(200, {"ok": True}) if self.path == "/health" else self._reply(404, {"error": "not found"})
+
+        def do_POST(self):
+            if self.path != "/scene":
+                self._reply(404, {"error": "not found"})
+                return
+            log("Unity: run the motion scene")
+            loop.call_soon_threadsafe(queue.put_nowait, "http")
+            self._reply(200, {"ok": True, "scene": "motion"})
+
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    log(f"control API on http://127.0.0.1:{port}  (POST /scene)")
+
+
 async def run(args, demo):
     ws_url = args.url.rstrip("/").replace("http", "ws", 1) + "/api/websocket"
     keys = asyncio.Queue()
     start_keyboard(asyncio.get_running_loop(), keys)
+    if args.http:
+        start_http(asyncio.get_running_loop(), keys, args.http)
 
     async def key_loop():
         while True:
@@ -318,6 +354,8 @@ def main():
     p.add_argument("--jazz-test", action="store_true", help="play jazz 20 s on --speaker and exit")
     p.add_argument("--cover", default=COVER)
     p.add_argument("--off-delay", type=float, default=10, help="seconds without motion before undo")
+    p.add_argument("--http", type=int, default=0, metavar="PORT",
+                   help="local control API for the Unity twin, e.g. 8766 (POST /scene = Enter)")
     args = p.parse_args()
     if not args.token:
         sys.exit("No token. Set HA_TOKEN or pass --token.")
