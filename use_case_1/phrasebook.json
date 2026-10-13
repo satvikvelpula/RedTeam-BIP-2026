@@ -1,0 +1,10 @@
+{
+  "lamp": {
+    "name": "Aqara Dimmer Switch H2",
+    "group_address": "",
+    "dpt": "",
+    "ha_entity_id": "light.aqara_dimmer_switch_h2",
+    "writable": true,
+    "note": "The one dimmer light on this Home Assistant. On and off go through light.turn_on and light.turn_off. Home Assistant delivers that to the dimmer over Matter. This device has no KNX group address."
+  }
+}
