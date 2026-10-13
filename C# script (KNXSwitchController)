@@ -1,0 +1,30 @@
+
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+public class KNXSwitchController : MonoBehaviour
+{
+    [SerializeField] private Light controlledLight;
+
+    public bool switchOn = false;
+    public bool motionDetected = false;
+
+    private void Update()
+    {
+        if (Keyboard.current != null &&
+            Keyboard.current.spaceKey.wasPressedThisFrame)
+        {
+            switchOn = !switchOn;
+        }
+
+        UpdateLight();
+    }
+
+    public void UpdateLight()
+    {
+        if (controlledLight != null)
+        {
+            controlledLight.enabled = switchOn || motionDetected;
+        }
+    }
+}
