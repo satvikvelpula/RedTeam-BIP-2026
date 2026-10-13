@@ -1,0 +1,63 @@
+
+using UnityEngine;
+using UnityEngine.InputSystem;
+using TMPro;
+
+public class ThermostatController : MonoBehaviour
+{
+    [Header("Temperature")]
+    public float roomTemperature = 18f;
+    public float targetTemperature = 22f;
+    public TMP_Text temperatureDisplay;
+
+    [Header("Heating")]
+    public Light heatingLight;
+    public bool heatingOn = false;
+
+    private float timer;
+
+    void Update()
+    {
+        if (temperatureDisplay != null)
+        {
+            temperatureDisplay.text =
+                "ROOM: " + roomTemperature.ToString("F1") + "°C\n" +
+                "TARGET: " + targetTemperature.ToString("F1") + "°C";
+        }
+        // Increase or decrease target temperature
+        if (Keyboard.current != null)
+        {
+            if (Keyboard.current.upArrowKey.wasPressedThisFrame)
+                targetTemperature += 1f;
+
+            if (Keyboard.current.downArrowKey.wasPressedThisFrame)
+                targetTemperature -= 1f;
+        }
+
+        // Decide whether heating is needed
+        heatingOn = roomTemperature < targetTemperature - 0.5f;
+
+        // Simulate room temperature changing over time
+        timer += Time.deltaTime;
+
+        if (timer >= 1f)
+        {
+            timer = 0f;
+
+            if (heatingOn)
+                roomTemperature += 0.2f;
+            else if (roomTemperature > targetTemperature)
+                roomTemperature -= 0.1f;
+
+            Debug.Log(
+                "Room: " + roomTemperature.ToString("F1") +
+                "°C | Target: " + targetTemperature.ToString("F1") +
+                "°C | Heating: " + heatingOn
+            );
+        }
+
+        // Optional visual indicator for heating
+        if (heatingLight != null)
+            heatingLight.enabled = heatingOn;
+    }
+}
