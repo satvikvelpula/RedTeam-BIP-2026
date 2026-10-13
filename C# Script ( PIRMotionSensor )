@@ -1,0 +1,23 @@
+
+using UnityEngine;
+
+public class PIRMotionSensor : MonoBehaviour
+{
+    [SerializeField] private Collider sensorArea;
+    [SerializeField] private Transform playerCamera;
+    [SerializeField] private KNXSwitchController lightController;
+
+    private void Update()
+    {
+        if (sensorArea == null || playerCamera == null ||
+            lightController == null)
+        {
+            return;
+        }
+
+        lightController.motionDetected =
+            sensorArea.bounds.Contains(playerCamera.position);
+
+        lightController.UpdateLight();
+    }
+}
