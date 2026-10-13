@@ -5,3 +5,25 @@ __pycache__/
 Thumbs.db
 desktop.ini
 .env
+
+# Unity (generated when the project is opened in the Editor)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+*.csproj
+*.sln
+*.suo
+*.user
+*.pidb
+*.booproj
+.vs/
+.idea/
+
+# local secrets for the Python helpers
+.env
+twin_states.jsonl
