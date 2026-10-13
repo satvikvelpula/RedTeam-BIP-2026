@@ -1,0 +1,8 @@
+cycles device OPTIX NVIDIA GeForce RTX 2050
+rendered v3_overview
+rendered v3_from_window
+rendered v3_from_door
+rendered v3_knx_stand
+rendered v3_plan
+saved D:\TelTech\Models\IVAR_Lab\ivar-lab-taltech.blend objects 383 materials 50
+OK
