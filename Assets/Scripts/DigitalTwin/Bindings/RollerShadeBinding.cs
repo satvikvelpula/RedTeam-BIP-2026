@@ -64,6 +64,10 @@ namespace DigitalTwin
                 case "opening": if (!m.hasPosition || Target <= Position) Target = 1f; break;
                 case "closing": if (!m.hasPosition || Target >= Position) Target = 0f; break;
             }
+            // First state from Home Assistant: jump straight to where the real shade is
+            // instead of animating from the start pose.
+            if (m.@event == "snapshot" && !m.simulated && m.state != "opening" && m.state != "closing")
+            { Position = Target; ApplyVisual(0f); _lastState = State; }
         }
 
         void Update()
