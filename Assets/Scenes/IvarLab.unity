@@ -9592,8 +9592,9 @@ MonoBehaviour:
   message: Door is open
   voice: {fileID: 8300000, guid: 8f829fca620148e468b9e60ee1081592, type: 3}
   volume: 1
-  labelHeight: 0.25
-  labelSize: 0.9
+  labelHeight: 0.1
+  labelForward: 0.4
+  labelSize: 1.1
   labelColor: {r: 1, g: 0.82, b: 0.25, a: 1}
 --- !u!1 &523538035 stripped
 GameObject:
