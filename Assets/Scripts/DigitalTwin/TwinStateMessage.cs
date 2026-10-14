@@ -26,6 +26,7 @@ namespace DigitalTwin
         public int[] rgb_color;        // lights: [r,g,b] 0-255 (only when HA reports it)
         public float brightness;       // lights: 0-255
         public float position;         // covers: current_position 0 (closed) - 100 (open)
+        public float target;           // climate: target temperature (attribute "temperature")
 
         // Not in the JSON: filled in by the receiver because JsonUtility can't tell
         // "field missing" from "field = default".
@@ -34,6 +35,7 @@ namespace DigitalTwin
         [NonSerialized] public bool simulated;
         [NonSerialized] public bool hasPosition;
         [NonSerialized] public bool hasBrightness;
+        [NonSerialized] public bool hasTarget;
 
         public bool HasColor => rgb_color != null && rgb_color.Length >= 3;
         public UnityEngine.Color Color => HasColor ? new UnityEngine.Color(rgb_color[0] / 255f, rgb_color[1] / 255f, rgb_color[2] / 255f) : UnityEngine.Color.white;

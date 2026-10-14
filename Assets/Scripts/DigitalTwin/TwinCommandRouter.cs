@@ -14,10 +14,12 @@ namespace DigitalTwin
     ///
     ///   Use case 1  lamp           -> lamp_api.py  (POST http://127.0.0.1:8765/devices/lamp/set),
     ///                                 falls back to HA light.turn_on/off if lamp_api.py isn't running
-    ///   Use case 4  motion sensor  -> motion_demo.py --http (POST http://127.0.0.1:8766/scene)
+    ///   Use case 4  motion sensor  -> motion_demo.py --http (POST http://127.0.0.1:8767/scene)
     ///               roller shade   -> HA cover.open_cover / close_cover (motion_demo.py reacts to it)
     ///               LED strip      -> HA light.turn_on / turn_off
     ///   Use case 2  window sensor  -> read-only: mirrored live, a press does nothing on the stand
+    ///   Use case 3  thermostat +/- -> temperature.py serve (POST http://127.0.0.1:8766/devices/temperature/set),
+    ///                                 falls back to HA climate.set_temperature; siren is driven by temperature.py
     ///
     /// Without Home Assistant (at home, no token) every press is simulated locally, as before.
     /// Uses HttpClient, not UnityWebRequest, so plain-http URLs work without changing Player Settings.
@@ -35,12 +37,16 @@ namespace DigitalTwin
         public string lampEntity = "light.aqara_dimmer_switch_h2_2";
         public string lampApiUrl = "http://127.0.0.1:8765";
 
-        [Header("Use case 4 - motion demo (motion_demo.py --http 8766)")]
-        public string motionDemoUrl = "http://127.0.0.1:8766";
+        [Header("Use case 4 - motion demo (motion_demo.py --http 8767)")]
+        public string motionDemoUrl = "http://127.0.0.1:8767";
+
+        [Header("Use case 3 - temperature (use_case_3/temperature.py serve)")]
+        public string temperatureApiUrl = "http://127.0.0.1:8766";
 
         public string LastResult { get; private set; } = "";
         public bool LampApiOnline { get; private set; }
         public bool MotionDemoOnline { get; private set; }
+        public bool TemperatureApiOnline { get; private set; }
 
         static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
         readonly ConcurrentQueue<Action> _main = new ConcurrentQueue<Action>();
@@ -81,6 +87,7 @@ namespace DigitalTwin
                 _nextProbe = Time.unscaledTime + 5f;
                 Probe(lampApiUrl + "/health", ok => LampApiOnline = ok);
                 Probe(motionDemoUrl + "/health", ok => MotionDemoOnline = ok);
+                Probe(temperatureApiUrl + "/health", ok => TemperatureApiOnline = ok);
             }
         }
 
@@ -120,7 +127,7 @@ namespace DigitalTwin
                 CallService(domain, isOn ? "turn_off" : "turn_on", id);
                 return true;
             }
-            if (id.StartsWith("binary_sensor.") || id.StartsWith("sensor."))
+            if (id.StartsWith("binary_sensor.") || id.StartsWith("sensor.") || id.StartsWith("siren."))
             {
                 Debug.Log($"[Cmd] {id} is a real sensor (read-only) — the twin shows its live state; open/close it on the stand.");
                 return true;                                            // don't fake a state the stand doesn't have
@@ -137,6 +144,16 @@ namespace DigitalTwin
             if (!IsLive) { InjectSim(lampEntity, level > 0 ? "on" : "off", "light", m => { m.brightness = level; m.hasBrightness = true; }); return; }
             Post(lampApiUrl + "/devices/lamp/set", "{\"brightness\":" + level + "}", "lamp_api brightness " + level,
                  onFail: () => CallService("light", level > 0 ? "turn_on" : "turn_off", lampEntity, level > 0 ? ",\"brightness\":" + level : ""));
+        }
+
+        /// <summary>Thermostat setpoint in °C (use case 3). Returns false when offline, so the caller simulates.</summary>
+        public bool SetThermostatTarget(string climateEntity, float celsius)
+        {
+            if (!IsLive || string.IsNullOrEmpty(climateEntity)) return false;
+            string v = celsius.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+            Post(temperatureApiUrl + "/devices/temperature/set", "{\"temperature_c\":" + v + "}", "temperature.py set " + v,
+                 onFail: () => CallService("climate", "set_temperature", climateEntity, ",\"temperature\":" + v));
+            return true;
         }
 
         /// <summary>Shade position 0 (down) - 100 (up).</summary>

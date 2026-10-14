@@ -71,7 +71,11 @@ namespace DigitalTwin
                 return;
             }
             _wanted.Clear();
-            foreach (var b in FindObjectsOfType<TwinEntityBinding>(true)) if (!string.IsNullOrEmpty(b.entityId)) _wanted.Add(b.entityId);
+            foreach (var b in FindObjectsOfType<TwinEntityBinding>(true))
+            {
+                if (!string.IsNullOrEmpty(b.entityId)) _wanted.Add(b.entityId);
+                foreach (var x in b.ExtraEntityIds) if (!string.IsNullOrEmpty(x)) _wanted.Add(x);
+            }
             if (extraEntities != null) foreach (var e in extraEntities) if (!string.IsNullOrEmpty(e)) _wanted.Add(e);
             _cts = new CancellationTokenSource();
             var ct = _cts.Token; var wsUrl = WsUrl(url);
@@ -149,7 +153,7 @@ namespace DigitalTwin
         static string TwinAttrs(JObject s)
         {
             var a = s["attributes"] as JObject;
-            return a == null ? "" : $"{a["rgb_color"]}|{a["brightness"]}|{a["current_position"]}";
+            return a == null ? "" : $"{a["rgb_color"]}|{a["brightness"]}|{a["current_position"]}|{a["temperature"]}";
         }
 
         /// Same fields as ha_twin_logger.py make_msg().
@@ -171,6 +175,7 @@ namespace DigitalTwin
             if (a["rgb_color"] is JArray rgb && rgb.Count >= 3) m.rgb_color = new[] { (int)rgb[0], (int)rgb[1], (int)rgb[2] };
             if (a["brightness"] != null && a["brightness"].Type != JTokenType.Null) { m.brightness = (float)a["brightness"]; m.hasBrightness = true; }
             if (a["current_position"] != null && a["current_position"].Type != JTokenType.Null) { m.position = (float)a["current_position"]; m.hasPosition = true; }
+            if (m.domain == "climate" && a["temperature"] != null && a["temperature"].Type != JTokenType.Null) { m.target = (float)a["temperature"]; m.hasTarget = true; }
             return m;
         }
 

@@ -55,7 +55,7 @@ namespace DigitalTwin
                 {
                     string On(bool ok) => ok ? "<color=#5be38a>on</color>" : "<color=#9aa3ad>off</color>";
                     _sb.Append(cmd.IsLive ? "<color=#5be38a>Presses → real stand</color>" : "<color=#7fb2ff>Presses → simulated</color>")
-                       .Append($" <size=70%>· lamp_api {On(cmd.LampApiOnline)} · motion_demo {On(cmd.MotionDemoOnline)}</size>\n");
+                       .Append($" <size=70%>· lamp_api {On(cmd.LampApiOnline)} · motion_demo {On(cmd.MotionDemoOnline)} · temperature {On(cmd.TemperatureApiOnline)}</size>\n");
                     if (!string.IsNullOrEmpty(cmd.LastResult)) _sb.Append($"<size=70%><color=#9aa3ad>last: {cmd.LastResult}</color></size>\n");
                 }
                 _sb.Append(link).Append("\n<size=70%><color=#9aa3ad>────────────────────────────</color></size>\n");

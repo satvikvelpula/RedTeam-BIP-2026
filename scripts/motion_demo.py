@@ -13,7 +13,7 @@ and calls HA services over REST. Nothing in the lab's HA config is changed.
   shade "closed"                   -> jazz radio on the speaker (--speaker), quiet volume
   shade "open"/"opening"/"closing" -> jazz stops
   press Enter in this window       -> run the "motion" scene by hand (for a busy room)
-  POST http://127.0.0.1:8766/scene -> same as Enter (with --http 8766; the Unity twin calls this
+  POST http://127.0.0.1:8767/scene -> same as Enter (with --http 8767; the Unity twin calls this
                                       when you press the PIR sensor in VR)
   Ctrl+C                           -> restore the strip and the shade to how they were at start
 
@@ -23,7 +23,7 @@ Usage (PowerShell, same window/token as the logger):
   $env:HA_TOKEN="<token>"
   python motion_demo.py --url http://homeassistant.local:8123
 Options: --motion, --rgb, --green, --cover to use other entities; --off-delay seconds.
-With the Unity twin:  python motion_demo.py --url http://homeassistant.local:8123 --http 8766
+With the Unity twin:  python motion_demo.py --url http://homeassistant.local:8123 --http 8767
 
 Which light is which strip? Run
   python motion_demo.py --url http://homeassistant.local:8123 --identify
@@ -355,7 +355,7 @@ def main():
     p.add_argument("--cover", default=COVER)
     p.add_argument("--off-delay", type=float, default=10, help="seconds without motion before undo")
     p.add_argument("--http", type=int, default=0, metavar="PORT",
-                   help="local control API for the Unity twin, e.g. 8766 (POST /scene = Enter)")
+                   help="local control API for the Unity twin, e.g. 8767 (POST /scene = Enter)")
     args = p.parse_args()
     if not args.token:
         sys.exit("No token. Set HA_TOKEN or pass --token.")

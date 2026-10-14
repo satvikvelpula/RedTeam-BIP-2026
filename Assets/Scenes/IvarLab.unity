@@ -24242,7 +24242,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 067ae2012f131be4cb8b14406c9d5096, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: binary_sensor.frient_a_s_smszb_120
+  entityId: siren.frient_a_s_smszb_120_siren
   allowSimulatedInteraction: 1
   flasher: {fileID: 1668211892}
   flashWhenOn: 1
@@ -26286,14 +26286,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a2d31364759f1a149a5cef9651c5a526, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: sensor.thermostat_current_temperature
+  entityId: sensor.aqara_floor_heating_thermostat_temperature
   allowSimulatedInteraction: 1
   display: {fileID: 61812383}
   format: 0.0
   fallbackUnit: "\xB0C"
+  targetEntity: climate.aqara_floor_heating_thermostat
   simStep: 0.5
   simMin: 18
   simMax: 26
+  targetMin: 5
+  targetMax: 35
 --- !u!1 &1812032257
 GameObject:
   m_ObjectHideFlags: 0

@@ -24,6 +24,7 @@ namespace DigitalTwin
             if (_receiver == null) { Debug.LogWarning($"[Twin] No TwinUdpReceiver in scene for {name}"); return; }
             _receiver.OnMessage += Handle;
             if (!string.IsNullOrEmpty(entityId) && _receiver.TryGetLatest(entityId, out var m)) Handle(m);
+            foreach (var x in ExtraEntityIds) if (!string.IsNullOrEmpty(x) && _receiver.TryGetLatest(x, out var e)) Handle(e);
         }
 
         protected virtual void OnDestroy()
@@ -31,9 +32,20 @@ namespace DigitalTwin
             if (_receiver != null) _receiver.OnMessage -= Handle;
         }
 
+        /// <summary>Other entities this binding also needs (e.g. a thermostat's setpoint). HomeAssistantClient subscribes to them.</summary>
+        public virtual System.Collections.Generic.IEnumerable<string> ExtraEntityIds { get { yield break; } }
+
+        /// <summary>Called for messages of one of the ExtraEntityIds.</summary>
+        protected virtual void ApplyExtra(TwinStateMessage m) { }
+
         void Handle(TwinStateMessage m)
         {
-            if (string.IsNullOrEmpty(entityId) || m.entity_id != entityId) return;
+            if (string.IsNullOrEmpty(entityId)) return;
+            if (m.entity_id != entityId)
+            {
+                foreach (var x in ExtraEntityIds) if (x == m.entity_id) { ApplyExtra(m); break; }
+                return;
+            }
             Current = m;
             Apply(m);
         }
