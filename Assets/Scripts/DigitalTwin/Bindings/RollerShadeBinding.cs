@@ -14,8 +14,8 @@ namespace DigitalTwin
         public string openBlendShape = "Open";
         [Tooltip("Roller tube (spins while moving). Its chain wheel spins with it.")]
         public Transform tube;
-        [Tooltip("Seconds for a full travel, like the real motor")]
-        public float travelSeconds = 12f;
+        [Tooltip("Seconds for a full travel. Measured on the lab Aqara E1 (14 Oct): ~30 s. HA only reports start/end, so the twin animates at this speed.")]
+        public float travelSeconds = 30f;
         [Tooltip("Tube revolutions for a full travel (visual only)")]
         public float tubeTurns = 9f;
         [Range(0, 1)] public float startOpen = 1f;

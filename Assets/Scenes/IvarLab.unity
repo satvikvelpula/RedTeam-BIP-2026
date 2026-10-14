@@ -11346,7 +11346,7 @@ MonoBehaviour:
   fabric: {fileID: 6679301155307379716}
   openBlendShape: Open
   tube: {fileID: 6906289157497263821}
-  travelSeconds: 12
+  travelSeconds: 30
   tubeTurns: 9
   startOpen: 1
 --- !u!1 &697244577 stripped
