@@ -32,7 +32,7 @@ namespace DigitalTwin
 
         [Header("Use case 1 - lamp (lamp_api.py serve)")]
         [Tooltip("Must match ha_entity_id in use_case_1/phrasebook.json")]
-        public string lampEntity = "light.aqara_dimmer_switch_h2";
+        public string lampEntity = "light.aqara_dimmer_switch_h2_2";
         public string lampApiUrl = "http://127.0.0.1:8765";
 
         [Header("Use case 4 - motion demo (motion_demo.py --http 8766)")]

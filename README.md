@@ -76,7 +76,7 @@ state Home Assistant reports back. Without a connection, presses are simulated a
 
 | Press in VR on | Goes to | Real result |
 |---|---|---|
-| Pendant lamp / KNX switch (use case 1) | `use_case_1/lamp_api.py serve` → HA `light.aqara_dimmer_switch_h2` (falls back to HA directly) | lamp on/off |
+| Pendant lamp / KNX switch (use case 1) | `use_case_1/lamp_api.py serve` → HA `light.aqara_dimmer_switch_h2_2` (falls back to HA directly) | lamp on/off |
 | PIR sensor (use case 4) | `scripts/motion_demo.py --http 8766` → `POST /scene` | shade down, strip red, jazz; shade up after the delay |
 | Roller shade | HA `cover.open_cover` / `close_cover` | shade moves; `motion_demo.py` switches the strip red/green |
 | LED strip | HA `light.turn_on` / `turn_off` | strip on/off |

@@ -9471,7 +9471,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 886480ced59f3a042b6fd9289b0a901a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: binary_sensor.window_door_is_open
+  entityId: binary_sensor.aqara_door_and_window_sensor_t1_door
   allowSimulatedInteraction: 1
   hinge: {fileID: 518770377}
   closedOffsetDegrees: -98
@@ -18922,7 +18922,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5da3019e397b43419cbeccead9c03ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: light.aqara_dimmer_switch_h2
+  entityId: light.aqara_dimmer_switch_h2_2
   allowSimulatedInteraction: 1
   lights:
   - {fileID: 2095567924}
@@ -24242,7 +24242,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 067ae2012f131be4cb8b14406c9d5096, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: binary_sensor.alarm
+  entityId: binary_sensor.frient_a_s_smszb_120
   allowSimulatedInteraction: 1
   flasher: {fileID: 1668211892}
   flashWhenOn: 1
@@ -26286,7 +26286,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a2d31364759f1a149a5cef9651c5a526, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  entityId: sensor.thermostat_temperature
+  entityId: sensor.thermostat_current_temperature
   allowSimulatedInteraction: 1
   display: {fileID: 61812383}
   format: 0.0
