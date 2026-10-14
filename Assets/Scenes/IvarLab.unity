@@ -3557,6 +3557,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -5970550960182108124, guid: 8e6a9fb6e91d53348a0280a740669853, type: 3}
       insertIndex: -1
       addedObject: {fileID: 518770379}
+    - targetCorrespondingSourceObject: {fileID: -5970550960182108124, guid: 8e6a9fb6e91d53348a0280a740669853, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 518770381}
     - targetCorrespondingSourceObject: {fileID: 6326717222625691847, guid: 8e6a9fb6e91d53348a0280a740669853, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1460119498}
@@ -9573,6 +9576,25 @@ MonoBehaviour:
   m_StartingInteractionStrengthFilters: []
   m_AutoFindParentInteractableInHierarchy: 0
   m_ParentInteractableObject: {fileID: 0}
+--- !u!114 &518770381
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 518770376}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74cd845a7166942489d6480bc6b76d1c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  binding: {fileID: 518770378}
+  message: Door is open
+  voice: {fileID: 8300000, guid: 8f829fca620148e468b9e60ee1081592, type: 3}
+  volume: 1
+  labelHeight: 0.25
+  labelSize: 0.9
+  labelColor: {r: 1, g: 0.82, b: 0.25, a: 1}
 --- !u!1 &523538035 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 90953105862313699, guid: 8e6a9fb6e91d53348a0280a740669853, type: 3}
