@@ -90,6 +90,15 @@ class HomeAssistant:
             {"entity_id": entity_id, "temperature": temperature_c},
         )
 
+    def set_siren(self, entity_id: str, on: bool) -> object:
+        """Turn a siren entity on or off. This does not change its volume or tone."""
+        service = "turn_on" if on else "turn_off"
+        return self._request(
+            "POST",
+            f"/api/services/siren/{service}",
+            {"entity_id": entity_id},
+        )
+
     def send_switch(self, group_address: str, bit: int) -> object:
         """Write a DPT 1 value. payload 1 = ON, payload 0 = OFF. No type field."""
         return self._request(

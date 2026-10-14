@@ -1,7 +1,9 @@
-"""Use case 3: read room temperature and log when it leaves the band.
+"""Use case 3: read room temperature and sound the siren above the high limit.
 
 Unity will GET the JSON. This script does not draw the virtual sensor.
-The warning device is a later step.
+A live reading turns the frient SMSZB-120 siren on while the measured
+temperature is above high_c, and turns it off when the reading comes back down.
+feed only classifies a number locally and does not touch the siren.
 
     python3 use_case_3/temperature.py read
     python3 use_case_3/temperature.py feed 26.5
@@ -89,14 +91,22 @@ def log_sample(payload: dict) -> None:
     status = payload["status"]
     low_c = float(payload["low_c"])
     high_c = float(payload["high_c"])
+    siren = payload.get("siren_state")
+    siren_text = f", siren {siren}" if siren else ""
     if status == "high":
-        log.warning("measured %.1f °C, target %s, above %.1f °C", measured, target_text, high_c)
+        log.warning(
+            "measured %.1f °C, target %s, above %.1f °C%s",
+            measured, target_text, high_c, siren_text,
+        )
     elif status == "low":
-        log.warning("measured %.1f °C, target %s, below %.1f °C", measured, target_text, low_c)
+        log.warning(
+            "measured %.1f °C, target %s, below %.1f °C%s",
+            measured, target_text, low_c, siren_text,
+        )
     else:
         log.info(
-            "measured %.1f °C, target %s, inside %.1f–%.1f °C",
-            measured, target_text, low_c, high_c,
+            "measured %.1f °C, target %s, inside %.1f–%.1f °C%s",
+            measured, target_text, low_c, high_c, siren_text,
         )
 
 
@@ -115,6 +125,8 @@ def build_reading(temperature_c: float, source: str) -> dict:
         "high_c": high_c,
         "status": status,
         "warning": status == "high",
+        "siren_entity_id": row.get("siren_entity_id", ""),
+        "siren_state": None,
         "source": source,
     }
 
@@ -182,7 +194,39 @@ def read_live() -> dict:
         raise RuntimeError(f"{entity} state is {raw}")
     payload = build_reading(parse_temperature(raw), "home_assistant")
     payload.update(target_fields(ha))
+    apply_siren(ha, payload)
     return payload
+
+
+def apply_siren(ha: HomeAssistant, payload: dict) -> None:
+    """Turn the siren on only while warning is true. Leave it alone when it already matches."""
+    entity = str(payload.get("siren_entity_id") or "").strip()
+    if not entity:
+        return
+    want = "on" if payload.get("warning") else "off"
+    try:
+        current = ha.entity_state(entity).get("state")
+    except HaError as exc:
+        log.warning("siren read failed: %s", exc)
+        return
+    if current in (None, "unknown", "unavailable"):
+        log.warning("siren %s is %s", entity, current)
+        payload["siren_state"] = current
+        return
+    if current == want:
+        payload["siren_state"] = current
+        return
+    try:
+        ha.set_siren(entity, want == "on")
+    except HaError as exc:
+        log.warning("siren command failed: %s", exc)
+        payload["siren_state"] = current
+        return
+    payload["siren_state"] = want
+    if want == "on":
+        log.warning("siren on: measured above %.1f °C", float(payload["high_c"]))
+    else:
+        log.info("siren off: measured back inside the band")
 
 
 def target_fields(ha: HomeAssistant) -> dict:
@@ -359,9 +403,14 @@ if __name__ == "__main__":
         assert classify(25.1, 18, 25) == "high"
         assert classify(17.9, 18, 25) == "low"
         sample = build_reading(22.0, "manual")
+        assert sample["warning"] is False
+        assert sample["siren_state"] is None
+        assert sample["siren_entity_id"] == "siren.frient_a_s_smszb_120_siren"
         assert LATEST.update(sample) is True
         assert LATEST.update(build_reading(22.4, "manual")) is False
-        assert LATEST.update(build_reading(26.0, "manual")) is True
+        hot = build_reading(26.0, "manual")
+        assert hot["warning"] is True
+        assert LATEST.update(hot) is True
         assert LATEST.get()["status"] == "high"
         print("temperature checks passed")
     else:

@@ -8,6 +8,7 @@
     "high_c": 25,
     "min_c": 5,
     "max_c": 35,
-    "note": "ha_entity_id is the measured temperature, read every 5 s. climate_entity_id is the setpoint the virtual control writes. The measured sensor cannot be overwritten."
+    "siren_entity_id": "siren.frient_a_s_smszb_120_siren",
+    "note": "ha_entity_id is the measured temperature, read every 5 s. climate_entity_id is the setpoint the virtual control writes. The measured sensor cannot be overwritten. siren_entity_id is the frient A/S SMSZB-120 Siren. A live reading turns it on only while the measured temperature is above high_c, and turns it off again when the reading comes back down."
   }
 }
