@@ -199,3 +199,11 @@ A package that runs on the headset by itself is a separate job, done once per re
 The siren and the temperature reading were confirmed on the stand by warming the physical sensor until the measured value passed 25 °C. The spoken door announcement was not recorded as its own live test. The scene runs in the Editor on the lab network. The Quest package name, version, and build script are in the project. Frame rate and latency on a headset were not measured.
 
 The project uses Unity 2022.3.62f3 rather than 2022.3.76f1, and the XR Interaction Toolkit rather than VRTK. Devices stay where the scan placed them. They are not moved at runtime.
+
+## 7. Further development
+
+The alarm can be acknowledged. Today the siren stays on for as long as the measured temperature or the setpoint is above 25 °C. A person in the room needs a way to silence it while the reading is still high, so the sound means “this has been noticed” and then stops.
+
+Each device needs its own state label, placed next to the object. A change such as on, off, opening, or a new temperature should be readable there, at the component, as well as on the status panel.
+
+The helper programs should be able to address several Home Assistant devices in one response. A real condition in the room, such as heat, an open door, or motion, can then drive a coordinated set of actions across lights, shade, climate, and the siren, rather than one program owning one device.
