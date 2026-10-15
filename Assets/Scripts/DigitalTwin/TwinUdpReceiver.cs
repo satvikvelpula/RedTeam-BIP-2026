@@ -10,7 +10,7 @@ using UnityEngine;
 namespace DigitalTwin
 {
     /// <summary>
-    /// Listens for UDP datagrams from ha_twin_logger.py (--udp 127.0.0.1:5005) and
+    /// Listens for UDP datagrams from ha_twin_logger.py (--udp 127.0.0.1:5005) or twin_bridge.py (headset) and
     /// dispatches each parsed message on the main thread.
     /// </summary>
     [DefaultExecutionOrder(-100)]
@@ -22,6 +22,8 @@ namespace DigitalTwin
         public int port = 5005;
         public bool listenOnStart = true;
         public bool logToConsole = true;
+        [Tooltip("Only real Home Assistant states move the twin. Clicks/keys never fake a state; if Home Assistant is offline nothing changes.")]
+        public bool realSensorsOnly = true;
 
         /// <summary>Fired on the main thread for every message (real or simulated).</summary>
         public event Action<TwinStateMessage> OnMessage;
@@ -32,7 +34,7 @@ namespace DigitalTwin
         public bool IsListening => _running;
         public IReadOnlyDictionary<string, TwinStateMessage> Latest => _latest;
 
-        readonly ConcurrentQueue<string> _queue = new ConcurrentQueue<string>();
+        readonly ConcurrentQueue<(string json, string from)> _queue = new ConcurrentQueue<(string json, string from)>();
         readonly Dictionary<string, TwinStateMessage> _latest = new Dictionary<string, TwinStateMessage>();
         UdpClient _client;
         Thread _thread;
@@ -86,7 +88,7 @@ namespace DigitalTwin
                 try
                 {
                     byte[] data = _client.Receive(ref any);
-                    _queue.Enqueue(Encoding.UTF8.GetString(data));
+                    _queue.Enqueue((Encoding.UTF8.GetString(data), any.Address.ToString()));
                 }
                 catch (SocketException) { if (!_running) break; }
                 catch (ObjectDisposedException) { break; }
@@ -96,7 +98,12 @@ namespace DigitalTwin
 
         void Update()
         {
-            while (_queue.TryDequeue(out var json)) InjectJson(json);
+            while (_queue.TryDequeue(out var item))
+            {
+                // Heartbeats and command results from twin_bridge.py (headset mode) go to TwinBridgeClient.
+                if (item.json.Contains("\"twin.bridge.v1\"")) { if (TwinBridgeClient.Instance != null) TwinBridgeClient.Instance.HandleBridgeMessage(item.json, item.from); continue; }
+                InjectJson(item.json);
+            }
         }
 
         /// <summary>Parse and dispatch one JSON line (same format the logger prints).</summary>
@@ -118,6 +125,12 @@ namespace DigitalTwin
         /// <summary>Dispatch an already-built message (used by the simulator and VR interactions).</summary>
         public void Inject(TwinStateMessage m)
         {
+            if (m == null) return;
+            if (realSensorsOnly && m.simulated)                 // real-only mode: ignore every fake state change
+            {
+                if (logToConsole) Debug.Log($"[Twin] ignored simulated {m.entity_id} = {m.state} (real sensors only)");
+                return;
+            }
             _latest[m.entity_id] = m;
             MessagesReceived++;
             LastMessageTime = Time.unscaledTime;

@@ -37,7 +37,15 @@ namespace DigitalTwin
                         : $"<color=#f5c542>Idle</color> · {r.MessagesReceived} msgs · last {age:0}s ago";
                 }
                 var ha = HomeAssistantClient.Instance;
-                if (ha != null)
+                var br = TwinBridgeClient.Instance;
+                bool haDirect = ha != null && ha.State == HomeAssistantClient.Status.Connected;
+                if (!haDirect && br != null && br.IsActive)                 // headset: link to twin_bridge.py on the laptop
+                {
+                    _sb.Append(br.HaConnected ? $"<color=#5be38a>Laptop bridge {br.BridgeIp}: Home Assistant connected</color>"
+                             : br.IsConnected ? $"<color=#f5c542>Laptop bridge {br.BridgeIp}: Home Assistant offline</color>"
+                             : "<color=#f5c542>Looking for the laptop bridge…</color> <size=70%>(run twin_bridge.py, same Wi-Fi)</size>").Append("\n");
+                }
+                else if (ha != null)
                 {
                     string hs = ha.State switch
                     {
@@ -54,7 +62,7 @@ namespace DigitalTwin
                 if (cmd != null)
                 {
                     string On(bool ok) => ok ? "<color=#5be38a>on</color>" : "<color=#9aa3ad>off</color>";
-                    _sb.Append(cmd.IsLive ? "<color=#5be38a>Presses → real stand</color>" : "<color=#7fb2ff>Presses → simulated</color>")
+                    _sb.Append(cmd.IsLive ? "<color=#5be38a>Presses → real stand</color>" : "<color=#ff6b5b>Presses do nothing — Home Assistant not connected</color>")
                        .Append($" <size=70%>· lamp_api {On(cmd.LampApiOnline)} · motion_demo {On(cmd.MotionDemoOnline)} · temperature {On(cmd.TemperatureApiOnline)}</size>\n");
                     if (!string.IsNullOrEmpty(cmd.LastResult)) _sb.Append($"<size=70%><color=#9aa3ad>last: {cmd.LastResult}</color></size>\n");
                 }
@@ -70,7 +78,7 @@ namespace DigitalTwin
                     string label = string.IsNullOrEmpty(m.name) ? m.entity_id : m.name;
                     _sb.Append($"{label}  <color=#9aa3ad><size=70%>{m.entity_id}</size></color>\n   {val}{(m.simulated ? "  <size=70%><color=#7fb2ff>(sim)</color></size>" : "")}\n");
                 }
-                if (rows == 0) _sb.Append("<color=#9aa3ad>No entities yet.\nPoint & pull trigger (VR) or click (desktop) on the door, switch, thermostat or sensor to simulate.</color>");
+                if (rows == 0) _sb.Append("<color=#9aa3ad>No entities yet — waiting for real data from Home Assistant.</color>");
             }
             text.text = _sb.ToString();
         }

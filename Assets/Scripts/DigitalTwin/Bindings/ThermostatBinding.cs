@@ -29,6 +29,9 @@ namespace DigitalTwin
         string _measuredText = "--.-";
 
         public float Target => _target;
+        /// <summary>Last measured temperature (simulated or from Home Assistant).</summary>
+        public float Measured => _value;
+        public bool HasMeasured { get; private set; }
 
         public override IEnumerable<string> ExtraEntityIds { get { if (!string.IsNullOrEmpty(targetEntity)) yield return targetEntity; } }
 
@@ -40,6 +43,7 @@ namespace DigitalTwin
             if (m.hasNumber)
             {
                 _value = m.number;
+                HasMeasured = true;
                 string unit = string.IsNullOrEmpty(m.unit) ? fallbackUnit : m.unit;
                 _measuredText = m.number.ToString(format, CultureInfo.InvariantCulture) + "<size=60%>" + unit + "</size>";
             }

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace DigitalTwin
@@ -74,10 +75,18 @@ namespace DigitalTwin
         {
             get
             {
-                var ha = HomeAssistantClient.Instance;
-                return sendToRealDevices && ha != null && ha.State == HomeAssistantClient.Status.Connected;
+                if (!sendToRealDevices) return false;
+                if (Direct) return true;
+                var br = TwinBridgeClient.Instance;               // headset: the laptop bridge is connected to HA
+                return br != null && br.HaConnected;
             }
         }
+
+        /// <summary>This app has its own Home Assistant connection (Editor / PC with a token).</summary>
+        bool Direct { get { var ha = HomeAssistantClient.Instance; return ha != null && ha.State == HomeAssistantClient.Status.Connected; } }
+        /// <summary>Headset mode: commands go through twin_bridge.py on the laptop.</summary>
+        bool ViaBridge => !Direct && TwinBridgeClient.Instance != null && TwinBridgeClient.Instance.IsConnected;
+        static bool IsLocal(string url) => url.StartsWith("http://127.0.0.1") || url.StartsWith("http://localhost");
 
         void Update()
         {
@@ -98,7 +107,8 @@ namespace DigitalTwin
         {
             if (!IsLive || b == null || string.IsNullOrEmpty(b.entityId)) return false;
             string id = b.entityId;
-            bool isOn = b.Current != null && b.Current.IsOn;
+            // no state from HA yet -> toggle what the twin shows instead of always sending "on"
+            bool isOn = b.Current != null ? b.Current.IsOn : (b is LightBinding lb ? lb.ShownOn : b is LedStripBinding sb && sb.IsOn);
 
             if (b is MotionSensorBinding)
             {
@@ -169,6 +179,15 @@ namespace DigitalTwin
         /// <summary>POST /api/services/{domain}/{service} on Home Assistant.</summary>
         public void CallService(string domain, string service, string entityId, string extraJson = "")
         {
+            if (ViaBridge)
+            {
+                string bl = $"HA {domain}.{service} {entityId} (bridge)";
+                JObject data;
+                try { data = JObject.Parse("{\"entity_id\":\"" + entityId + "\"" + extraJson + "}"); }
+                catch { data = new JObject { ["entity_id"] = entityId }; }
+                TwinBridgeClient.Instance.CallService(domain, service, data, (ok, code, text) => Report(bl, ok, code, text, null));
+                return;
+            }
             var ha = HomeAssistantClient.Instance;
             if (ha == null) return;
             string url = ha.url.Trim().TrimEnd('/') + $"/api/services/{domain}/{service}";
@@ -178,6 +197,11 @@ namespace DigitalTwin
 
         void Post(string url, string json, string label, Action onFail = null, string auth = null)
         {
+            if (auth == null && ViaBridge && IsLocal(url))                 // helper scripts run on the laptop, not the headset
+            {
+                TwinBridgeClient.Instance.Http("POST", url, json, (ok, code, text) => Report(label + " (bridge)", ok, code, text, onFail));
+                return;
+            }
             Task.Run(async () =>
             {
                 try
@@ -211,8 +235,17 @@ namespace DigitalTwin
             });
         }
 
+        void Report(string label, bool ok, int code, string text, Action onFail)
+        {
+            LastResult = code > 0 ? $"{label} -> HTTP {code}" : $"{label} -> {text}";
+            if (ok) { Debug.Log("[Cmd] " + LastResult); return; }
+            Debug.LogWarning($"[Cmd] {LastResult}: {Trim(text)}");
+            onFail?.Invoke();
+        }
+
         void Probe(string url, Action<bool> set)
         {
+            if (ViaBridge && IsLocal(url)) { TwinBridgeClient.Instance.Http("GET", url, null, (ok, c, t) => set(ok)); return; }
             Task.Run(async () =>
             {
                 bool ok;

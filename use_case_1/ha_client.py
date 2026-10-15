@@ -90,6 +90,10 @@ class HomeAssistant:
             {"entity_id": entity_id, "temperature": temperature_c},
         )
 
+    def call_service(self, domain: str, service: str, data: dict) -> object:
+        """Any Home Assistant service, e.g. call_service("light", "turn_on", {"entity_id": ..., "rgb_color": [255, 0, 0]})."""
+        return self._request("POST", f"/api/services/{domain}/{service}", data)
+
     def set_siren(self, entity_id: str, on: bool) -> object:
         """Turn a siren entity on or off. This does not change its volume or tone."""
         service = "turn_on" if on else "turn_off"

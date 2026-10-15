@@ -7,11 +7,11 @@ and calls HA services over REST. Nothing in the lab's HA config is changed.
 
   motion "on"                      -> cover.close_cover (shade down)
   motion "off" for --off-delay s   -> cover.open_cover (shade up)
-  shade "closed"                   -> strip RED
-  shade "open"/"opening"/"closing" -> strip GREEN
+  shade "closing"/"closed"         -> strip RED  (red as soon as the shade starts going down)
+  shade "opening"/"open"           -> strip GREEN
   (with --green <entity>: a second strip shows green and the first one turns off)
-  shade "closed"                   -> jazz radio on the speaker (--speaker), quiet volume
-  shade "open"/"opening"/"closing" -> jazz stops
+  shade "closing"/"closed"         -> jazz radio on the speaker (--speaker), --volume (default 0.6)
+  shade "opening"/"open"           -> jazz stops
   press Enter in this window       -> run the "motion" scene by hand (for a busy room)
   POST http://127.0.0.1:8767/scene -> same as Enter (with --http 8767; the Unity twin calls this
                                       when you press the PIR sensor in VR)
@@ -84,14 +84,20 @@ class Demo:
         self.jazz_on = None     # last jazz on/off we sent
         self.active = False     # scene currently applied
         self.off_task = None
+        self.cover_state = None  # last shade state from HA
+        self.motion_state = None  # last motion state from HA
+        self.down = None        # shade down? (last one we reacted to)
 
     async def scene_on(self, why):
         if self.off_task:
             self.off_task.cancel()
             self.off_task = None
-        if self.active:
-            return
         self.active = True
+        # close every time motion comes and the shade is not already going down
+        # (it may have been opened in VR or by hand while the scene was active)
+        if self.cover_state in ("closed", "closing"):
+            log(f"MOTION ({why}) -> shade already down")
+            return
         log(f"MOTION ({why}) -> shade DOWN")
         await asyncio.to_thread(call, self.args, "cover", "close_cover", self.args.cover)
 
@@ -106,12 +112,15 @@ class Demo:
         except asyncio.CancelledError:
             return
         self.off_task = None
+        if self.motion_state == "on":
+            log("motion still on -> shade stays DOWN (goes up 45 s after the sensor clears)")
+            return
         self.active = False
         log("CLEAR -> shade UP")
         await asyncio.to_thread(call, self.args, "cover", "open_cover", self.args.cover)
 
     async def set_strip(self, entity, on, color):
-        if not entity or self.strip_on.get(entity) == on:
+        if not entity:
             return
         self.strip_on[entity] = on
         if on:
@@ -138,12 +147,16 @@ class Demo:
         """Red strip while the shade is down; green strip while it is up or moving."""
         if state not in ("closed", "open", "opening", "closing"):
             return
-        down = state == "closed"
-        await self.set_jazz(down)
+        self.cover_state = state
+        down = state in ("closed", "closing")   # red + jazz as soon as the shade starts down
+        if down != self.down:
+            self.down = down
+            # music in the background: a Google speaker can take 5-10 s and must not delay the strip
+            asyncio.ensure_future(self.set_jazz(down))
+        # the strip colour is sent on every shade change (no cache): if someone switched the strip
+        # off or the alarm changed it, the next shade move puts the right colour back
         if not self.args.green:  # one strip: red when down, green otherwise
             color = RED if down else GREEN
-            if self.strip_on.get(self.args.rgb) == color:
-                return
             self.strip_on[self.args.rgb] = color
             log(f"shade {state} -> strip {'RED' if down else 'GREEN'}")
             await asyncio.to_thread(call, self.args, "light", "turn_on", self.args.rgb,
@@ -310,6 +323,7 @@ async def run(args, demo):
                             if not demo.initial:
                                 demo.initial = {e: objs[e] for e in
                                                 (args.rgb, args.green, args.cover, args.speaker) if e}
+                            demo.motion_state = states[args.motion]
                             log(f"ready. motion={states[args.motion]}  red strip={states[args.rgb]}  "
                                 f"shade={states[args.cover]}  speaker={states.get(args.speaker, 'not set')}")
                             await demo.on_cover_state(states[args.cover])
@@ -328,6 +342,7 @@ async def run(args, demo):
                             if d.get("entity_id") != args.motion:
                                 continue
                             log(f"sensor: {old.get('state')} -> {new.get('state')}")
+                            demo.motion_state = new.get("state")
                             if new.get("state") == "on":
                                 await demo.scene_on("sensor")
                             elif new.get("state") == "off":
@@ -353,7 +368,9 @@ def main():
     p.add_argument("--content-type", default="music", help="e.g. music or audio/mpeg")
     p.add_argument("--jazz-test", action="store_true", help="play jazz 20 s on --speaker and exit")
     p.add_argument("--cover", default=COVER)
-    p.add_argument("--off-delay", type=float, default=10, help="seconds without motion before undo")
+    p.add_argument("--off-delay", type=float, default=45,
+                   help="seconds without motion before the shade goes up again (> shade travel ~30 s, "
+                        "otherwise it reverses before it is fully down)")
     p.add_argument("--http", type=int, default=0, metavar="PORT",
                    help="local control API for the Unity twin, e.g. 8767 (POST /scene = Enter)")
     args = p.parse_args()

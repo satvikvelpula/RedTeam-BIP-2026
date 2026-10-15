@@ -56,6 +56,8 @@ def load_env() -> None:
                 continue
             key, value = line.split("=", 1)
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    # no .env: HA_TOKEN from the PowerShell window ($env:HA_TOKEN), lab Home Assistant by default
+    os.environ.setdefault("HA_URL", "http://homeassistant.local:8123")
 
 
 def device_row() -> dict:
@@ -194,8 +196,71 @@ def read_live() -> dict:
         raise RuntimeError(f"{entity} state is {raw}")
     payload = build_reading(parse_temperature(raw), "home_assistant")
     payload.update(target_fields(ha))
-    apply_siren(ha, payload)
+    row = device_row()
+    target = payload.get("target_c")
+    if row.get("alarm_on_target", False) and target is not None and float(target) > float(row["high_c"]):
+        # demo rule: a setpoint above the limit (e.g. raised in VR) is also an over-temperature alarm
+        payload["warning"] = True
+        payload["alarm_reason"] = "target"
+    elif payload["warning"]:
+        payload["alarm_reason"] = "measured"
+    with ALARM_LOCK:
+        apply_alarm_lights(ha, payload)
+        apply_siren(ha, payload)
     return payload
+
+
+ALARM_LOCK = threading.Lock()
+ALARM_SAVED: dict | None = None   # light states before the alarm, None while no alarm is active
+
+
+def apply_alarm_lights(ha: HomeAssistant, payload: dict) -> None:
+    """Alarm on: lights in alarm_lights_off go off, alarm_red_lights go solid red. Alarm off: put them back."""
+    global ALARM_SAVED
+    row = device_row()
+    off_list = [e for e in row.get("alarm_lights_off", []) if e]
+    red_list = [e for e in row.get("alarm_red_lights", []) if e]
+    if not off_list and not red_list:
+        return
+    if payload.get("warning") and ALARM_SAVED is None:
+        saved = {}
+        for entity in off_list + red_list:
+            try:
+                saved[entity] = ha.entity_state(entity)
+            except HaError as exc:
+                log.warning("alarm: cannot read %s: %s", entity, exc)
+        ALARM_SAVED = saved
+        log.warning("alarm lights: %s off, %s red", ", ".join(off_list) or "-", ", ".join(red_list) or "-")
+        for entity in off_list:
+            _try(ha.call_service, "light", "turn_off", {"entity_id": entity})
+        for entity in red_list:
+            _try(ha.call_service, "light", "turn_on", {"entity_id": entity, "rgb_color": [255, 0, 0], "brightness": 255})
+    elif not payload.get("warning") and ALARM_SAVED is not None:
+        restore_alarm_lights(ha)
+
+
+def restore_alarm_lights(ha: HomeAssistant) -> None:
+    global ALARM_SAVED
+    saved, ALARM_SAVED = ALARM_SAVED or {}, None
+    log.info("alarm over: restoring %s", ", ".join(saved) or "nothing")
+    for entity, obj in saved.items():
+        state = (obj or {}).get("state")
+        attrs = (obj or {}).get("attributes") or {}
+        if state == "on":
+            data = {"entity_id": entity}
+            for key in ("rgb_color", "brightness"):
+                if attrs.get(key) is not None:
+                    data[key] = attrs[key]
+            _try(ha.call_service, "light", "turn_on", data)
+        elif state == "off":
+            _try(ha.call_service, "light", "turn_off", {"entity_id": entity})
+
+
+def _try(fn, *args) -> None:
+    try:
+        fn(*args)
+    except HaError as exc:
+        log.warning("alarm: %s", exc)
 
 
 def apply_siren(ha: HomeAssistant, payload: dict) -> None:
@@ -392,7 +457,17 @@ def main(argv: list[str]) -> None:
         threading.Thread(target=watch, args=(POLL_SECONDS,), daemon=True).start()
         server = ThreadingHTTPServer((HOST, PORT), Handler)
         print(f"temperature API on http://{HOST}:{PORT}")
-        server.serve_forever()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            ha = ha_from_env()
+            if ha is not None and ALARM_SAVED is not None:   # Ctrl+C during an alarm: siren off, lights back
+                siren = device_row().get("siren_entity_id", "")
+                if siren:
+                    _try(ha.set_siren, siren, False)
+                restore_alarm_lights(ha)
         return
     raise SystemExit("commands: read | set <celsius> | feed <celsius> | serve")
 
