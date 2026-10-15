@@ -27,3 +27,7 @@ desktop.ini
 # local secrets for the Python helpers
 .env
 twin_states.jsonl
+
+# Android signing keys must never be committed
+*.keystore
+*.jks

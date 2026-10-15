@@ -1,10 +1,12 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace DigitalTwin
 {
     /// <summary>
     /// Desktop test keys (no Home Assistant needed):
     ///   1 = door   2 = motion   3 = temperature +   4 = light   5 = beacon   6 = roller shade   7 = LED strip
+    /// Uses the new Input System (the legacy Input Manager is disabled for the Quest build).
     /// </summary>
     public class TwinKeyboardSimulator : MonoBehaviour
     {
@@ -18,13 +20,15 @@ namespace DigitalTwin
 
         void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Alpha1) && door) door.SimulateInteract();
-            if (Input.GetKeyDown(KeyCode.Alpha2) && motion) motion.SimulateInteract();
-            if (Input.GetKeyDown(KeyCode.Alpha3) && thermostat) thermostat.SimulateInteract();
-            if (Input.GetKeyDown(KeyCode.Alpha4) && lamp) lamp.SimulateInteract();
-            if (Input.GetKeyDown(KeyCode.Alpha5) && beacon) beacon.SimulateInteract();
-            if (Input.GetKeyDown(KeyCode.Alpha6) && shade) shade.SimulateInteract();
-            if (Input.GetKeyDown(KeyCode.Alpha7) && strip) strip.SimulateInteract();
+            var k = Keyboard.current;
+            if (k == null) return; // no keyboard on the headset
+            if (k.digit1Key.wasPressedThisFrame && door) door.SimulateInteract();
+            if (k.digit2Key.wasPressedThisFrame && motion) motion.SimulateInteract();
+            if (k.digit3Key.wasPressedThisFrame && thermostat) thermostat.SimulateInteract();
+            if (k.digit4Key.wasPressedThisFrame && lamp) lamp.SimulateInteract();
+            if (k.digit5Key.wasPressedThisFrame && beacon) beacon.SimulateInteract();
+            if (k.digit6Key.wasPressedThisFrame && shade) shade.SimulateInteract();
+            if (k.digit7Key.wasPressedThisFrame && strip) strip.SimulateInteract();
         }
     }
 }

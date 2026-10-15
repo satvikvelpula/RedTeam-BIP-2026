@@ -15,6 +15,8 @@ namespace DigitalTwin
         public bool startOn = true;
 
         bool _on;
+        /// <summary>What the twin shows right now (used when no state has come from Home Assistant yet).</summary>
+        public bool ShownOn => _on;
         float _level = 1f;                 // 0-1, from HA "brightness" (the lab lamp is a dimmer)
         float[] _baseIntensity;
         MaterialPropertyBlock _mpb;

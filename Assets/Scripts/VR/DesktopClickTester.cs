@@ -1,11 +1,13 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.XR;
 
 namespace DigitalTwin.VR
 {
     /// <summary>
     /// Without a headset: left-click a device in the Game view to simulate a state change
-    /// (keys 1-5 also work, see TwinKeyboardSimulator). Does nothing while a headset is active.
+    /// (keys 1-7 also work, see TwinKeyboardSimulator). Does nothing while a headset is active.
+    /// Uses the new Input System (the legacy Input Manager is disabled for the Quest build).
     /// </summary>
     public class DesktopClickTester : MonoBehaviour
     {
@@ -13,8 +15,9 @@ namespace DigitalTwin.VR
 
         void Update()
         {
-            if (XRSettings.isDeviceActive || cam == null || !Input.GetMouseButtonDown(0)) return;
-            if (Physics.Raycast(cam.ScreenPointToRay(Input.mousePosition), out var hit, 20f, ~0, QueryTriggerInteraction.Collide))
+            var mouse = Mouse.current;
+            if (XRSettings.isDeviceActive || cam == null || mouse == null || !mouse.leftButton.wasPressedThisFrame) return;
+            if (Physics.Raycast(cam.ScreenPointToRay(mouse.position.ReadValue()), out var hit, 20f, ~0, QueryTriggerInteraction.Collide))
             {
                 var press = hit.collider.GetComponentInParent<ITwinPressable>();
                 if (press != null) { press.Press(); return; }
