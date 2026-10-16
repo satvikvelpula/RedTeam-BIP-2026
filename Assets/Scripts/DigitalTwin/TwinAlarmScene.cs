@@ -11,8 +11,7 @@ namespace DigitalTwin
     /// When it ends, everything goes back to what the bindings say.
     ///
     /// Alarm = the real siren is on (Home Assistant, driven by use_case_3/temperature.py)
-    ///      OR the measured temperature is above highC
-    ///      OR the thermostat setpoint is above highC (same rule as temperature.py "alarm_on_target"),
+    ///      OR the measured temperature is above highC (the setpoint never triggers it),
     /// so the twin shows the alarm at once, also offline and before temperature.py reacts.
     /// </summary>
     [DefaultExecutionOrder(100)]
@@ -22,9 +21,9 @@ namespace DigitalTwin
         public BeaconBinding beacon;
         public LedStripBinding strip;
         [Tooltip("Same as high_c in use_case_3/phrasebook.json")]
-        public float highC = 25f;
+        public float highC = 24.5f;
         [Tooltip("Also alarm when the setpoint is above highC (same as alarm_on_target in phrasebook.json)")]
-        public bool alarmOnTarget = true;
+        public bool alarmOnTarget = false; // unused: setpoint never triggers the alarm
         [Tooltip("Lights that stay on during the alarm (beacon and strip glow are always kept).")]
         public Light[] keepLights;
         public Color alarmAmbient = new Color(0.22f, 0.02f, 0.02f);
@@ -61,7 +60,7 @@ namespace DigitalTwin
             {
                 if (!thermostat) return false;
                 if (thermostat.HasMeasured && thermostat.Measured > highC) return true;
-                return alarmOnTarget && !float.IsNaN(thermostat.Target) && thermostat.Target > highC;
+                return false; // setpoint never triggers the alarm, only the measured temperature
             }
         }
 
