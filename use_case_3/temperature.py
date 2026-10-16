@@ -350,7 +350,7 @@ def watch(interval: float) -> None:
     while True:
         try:
             payload = read_live()
-        except (HaError, RuntimeError, ValueError) as exc:
+        except Exception as exc:   # any error (timeout, dropped connection): log it and keep watching
             log.warning("temperature read failed: %s", exc)
         else:
             target = payload.get("target_c")

@@ -1,0 +1,21 @@
+{
+  "temperature": {
+    "name": "Aqara Floor Heating Thermostat",
+    "ha_entity_id": "sensor.aqara_floor_heating_thermostat_temperature",
+    "climate_entity_id": "climate.aqara_floor_heating_thermostat",
+    "unit": "°C",
+    "low_c": 18,
+    "high_c": 25,
+    "min_c": 5,
+    "max_c": 35,
+    "siren_entity_id": "siren.frient_a_s_smszb_120_siren",
+    "note": "ha_entity_id is the measured temperature, read every 5 s. climate_entity_id is the setpoint the virtual control writes. The measured sensor cannot be overwritten. siren_entity_id is the frient A/S SMSZB-120 Siren. A live reading turns it on only while the measured temperature is above high_c, and turns it off again when the reading comes back down. alarm_on_target: a setpoint above high_c (e.g. raised in VR) also triggers the alarm. While the alarm is on, alarm_lights_off are switched off and alarm_red_lights turn solid red; they are restored afterwards.",
+    "alarm_on_target": true,
+    "alarm_lights_off": [
+      "light.aqara_dimmer_switch_h2_2"
+    ],
+    "alarm_red_lights": [
+      "light.rgbw_controller_2"
+    ]
+  }
+}

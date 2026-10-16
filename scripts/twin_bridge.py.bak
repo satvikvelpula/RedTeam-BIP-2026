@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""
+twin_bridge.py - laptop bridge between Home Assistant and the RedLab Twin app on a standalone Quest.
+
+The headset has no Home Assistant token and often cannot reach Home Assistant itself, so this
+script runs on the lab laptop (which can) and relays both directions over UDP:
+
+  headset  --hello (UDP broadcast, port 5006)-->  bridge      "I am here, I need these entities"
+  headset  <--twin.state.v1 (UDP :5005)---------  bridge      snapshot + every change, same JSON as ha_twin_logger.py
+  headset  <--twin.bridge.v1 heartbeat----------  bridge      every 2 s, says whether HA is connected
+  headset  --call_service / http (UDP :5006)--->  bridge      VR press -> HA service, or -> helper script on this laptop
+
+No IP addresses to type on either side: the headset finds the bridge by broadcast and the bridge
+answers to whatever address the hello came from. Laptop and headset must be on the same network
+(e.g. the laptop's Windows mobile hotspot, or the same phone hotspot), and Windows Firewall must
+allow Python to receive UDP on port 5006 (accept the prompt on first run).
+
+Usage (PowerShell):
+  pip install websockets
+  $env:HA_TOKEN="<long-lived token>"          # never put the token in files
+  python Scripts/twin_bridge.py --url http://homeassistant.local:8123
+
+Safety: a headset can only call services on the entities it announced in its hello, only in the
+domains listed in ALLOWED_DOMAINS (no locks), and "http" requests may only go to 127.0.0.1/localhost.
+"""
+import argparse
+import asyncio
+import json
+import os
+import socket
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
+
+import websockets
+
+BRIDGE_SCHEMA = "twin.bridge.v1"
+UNAVAILABLE = {"unavailable", "unknown", None, ""}
+ALLOWED_DOMAINS = {"light", "switch", "cover", "climate", "siren", "media_player", "input_boolean", "fan"}
+CLIENT_TTL = 15          # seconds without a hello before a headset is forgotten
+HEARTBEAT = 2
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def log(text):
+    print(f"{datetime.now():%H:%M:%S} {text}", flush=True)
+
+
+def make_msg(event, new, old=None):
+    """Same fields as HomeAssistantClient.ToMessage() in Unity (twin.state.v1)."""
+    entity_id = new["entity_id"]
+    domain = entity_id.split(".", 1)[0]
+    a = new.get("attributes") or {}
+    state = new.get("state")
+    msg = {
+        "schema": "twin.state.v1",
+        "event": event,
+        "ts": new.get("last_changed") or now_iso(),
+        "logged_at": now_iso(),
+        "entity_id": entity_id,
+        "name": a.get("friendly_name", entity_id),
+        "domain": domain,
+        "device_class": a.get("device_class") or "",
+        "state": state if state is not None else "",
+        "available": state not in UNAVAILABLE,
+    }
+    if domain == "binary_sensor":
+        msg["on"] = state == "on"
+    try:
+        msg["number"] = float(state)
+    except (TypeError, ValueError):
+        pass
+    if a.get("unit_of_measurement"):
+        msg["unit"] = a["unit_of_measurement"]
+    rgb = a.get("rgb_color")
+    if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
+        msg["rgb_color"] = [int(rgb[0]), int(rgb[1]), int(rgb[2])]
+    if a.get("brightness") is not None:
+        msg["brightness"] = float(a["brightness"])
+    if a.get("current_position") is not None:
+        msg["position"] = float(a["current_position"])
+    if domain == "climate" and a.get("temperature") is not None:
+        msg["target"] = float(a["temperature"])
+    if old is not None:
+        msg["prev_state"] = old.get("state") or ""
+    return msg
+
+
+def twin_attrs(s):
+    a = (s or {}).get("attributes") or {}
+    return (str(a.get("rgb_color")), a.get("brightness"), a.get("current_position"), a.get("temperature"))
+
+
+def do_http(method, url, body):
+    host = urllib.parse.urlparse(url).hostname
+    if host not in ("127.0.0.1", "localhost"):
+        return False, 0, f"only 127.0.0.1/localhost allowed, not {host}"
+    data = body.encode("utf-8") if method == "POST" else None
+    req = urllib.request.Request(url, data=data, method=method, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return 200 <= r.status < 300, r.status, r.read(500).decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return False, e.code, e.read(300).decode("utf-8", "replace")
+    except Exception as e:  # connection refused = helper script not running
+        return False, 0, str(getattr(e, "reason", e))
+
+
+class UdpProtocol(asyncio.DatagramProtocol):
+    def __init__(self, bridge):
+        self.bridge = bridge
+
+    def datagram_received(self, data, addr):
+        try:
+            msg = json.loads(data.decode("utf-8"))
+        except Exception:
+            return
+        if isinstance(msg, dict):
+            asyncio.ensure_future(self.bridge.handle(msg, addr))
+
+    def error_received(self, exc):
+        pass  # e.g. ICMP port unreachable after a headset left; ignore
+
+
+class Bridge:
+    def __init__(self, args):
+        self.args = args
+        self.states = {}        # entity_id -> HA state object
+        self.clients = {}       # (ip, reply_port) -> {"entities": set, "seen": t, "device": str}
+        self.ws = None
+        self.ha_ok = False
+        self.pending = {}
+        self.next_id = 100
+        self.transport = None
+
+    # ------------------------------------------------------------------ UDP side
+    def send(self, obj, addr):
+        if self.transport:
+            self.transport.sendto(json.dumps(obj, ensure_ascii=False).encode("utf-8"), addr)
+
+    def heartbeat(self):
+        return {"schema": BRIDGE_SCHEMA, "event": "heartbeat", "ha": self.ha_ok}
+
+    def client_for(self, ip):
+        for key, c in self.clients.items():
+            if key[0] == ip:
+                return key, c
+        return (ip, 5005), None
+
+    def send_snapshot(self, key, entities):
+        n = 0
+        for eid in entities:
+            s = self.states.get(eid)
+            if s:
+                self.send(make_msg("snapshot", s), key)
+                n += 1
+        return n
+
+    async def handle(self, msg, addr):
+        kind = msg.get("type")
+        ip = addr[0]
+        if kind == "hello":
+            key = (ip, int(msg.get("reply_port") or 5005))
+            new = key not in self.clients
+            ents = set(msg.get("entities") or [])
+            self.clients[key] = {"entities": ents, "seen": time.time(), "device": msg.get("device", "")}
+            self.send(self.heartbeat(), key)
+            if new or msg.get("want_snapshot"):
+                n = self.send_snapshot(key, ents)
+                if new:
+                    log(f"headset connected: {ip} ({msg.get('device', '?')}), {len(ents)} entities, sent {n} states")
+            return
+
+        key, client = self.client_for(ip)
+        if kind == "call_service":
+            ok, text = await self.call_service(msg, client)
+            log(f"{'OK ' if ok else 'ERR'} {ip}: {msg.get('domain')}.{msg.get('service')} "
+                f"{(msg.get('data') or {}).get('entity_id', '')} {'' if ok else '- ' + text}")
+            self.send({"schema": BRIDGE_SCHEMA, "event": "result", "id": msg.get("id"),
+                       "ok": ok, "status": 200 if ok else 0, "text": text, "ha": self.ha_ok}, key)
+        elif kind == "http":
+            method = (msg.get("method") or "POST").upper()
+            url = msg.get("url") or ""
+            if client is None:
+                ok, status, text = False, 0, "send hello first"
+            else:
+                ok, status, text = await asyncio.get_running_loop().run_in_executor(
+                    None, do_http, method, url, msg.get("body") or "")
+            if method != "GET":  # GETs are the 5 s health probes; keep the console readable
+                log(f"{'OK ' if ok else 'ERR'} {ip}: {method} {url} -> {status or text}")
+            self.send({"schema": BRIDGE_SCHEMA, "event": "result", "id": msg.get("id"),
+                       "ok": ok, "status": status, "text": text[:300], "ha": self.ha_ok}, key)
+
+    async def heartbeat_loop(self):
+        while True:
+            await asyncio.sleep(HEARTBEAT)
+            now = time.time()
+            for key in [k for k, c in self.clients.items() if now - c["seen"] > CLIENT_TTL]:
+                log(f"headset {key[0]} gone (no hello for {CLIENT_TTL} s)")
+                del self.clients[key]
+            for key in self.clients:
+                self.send(self.heartbeat(), key)
+
+    # ------------------------------------------------------------------ Home Assistant side
+    async def call_service(self, msg, client):
+        domain, service = msg.get("domain") or "", msg.get("service") or ""
+        data = msg.get("data") or {}
+        eid = data.get("entity_id") or ""
+        if domain not in ALLOWED_DOMAINS:
+            return False, f"domain '{domain}' not allowed"
+        if client is None:
+            return False, "send hello first"
+        if eid not in client["entities"]:
+            return False, f"{eid} is not used by this headset"
+        if self.ws is None:
+            return False, "Home Assistant not connected"
+        self.next_id += 1
+        mid = self.next_id
+        fut = asyncio.get_running_loop().create_future()
+        self.pending[mid] = fut
+        try:
+            await self.ws.send(json.dumps({"id": mid, "type": "call_service", "domain": domain,
+                                           "service": service, "service_data": data}))
+            r = await asyncio.wait_for(fut, 6)
+        except Exception as e:
+            self.pending.pop(mid, None)
+            return False, f"{type(e).__name__}: {e}"
+        if r.get("success"):
+            return True, "ok"
+        return False, (r.get("error") or {}).get("message", "failed")
+
+    async def ha_loop(self):
+        ws_url = self.args.url.rstrip("/").replace("http", "ws", 1) + "/api/websocket"
+        while True:
+            try:
+                async with websockets.connect(ws_url, max_size=None) as ws:
+                    await ws.recv()  # auth_required
+                    await ws.send(json.dumps({"type": "auth", "access_token": self.args.token}))
+                    auth = json.loads(await ws.recv())
+                    if auth.get("type") != "auth_ok":
+                        log(f"Home Assistant rejected the token: {auth.get('message', auth)}")
+                        os._exit(1)
+                    self.ws, self.ha_ok = ws, True
+                    log(f"connected to Home Assistant ({ws_url})")
+                    await ws.send(json.dumps({"id": 1, "type": "get_states"}))
+                    await ws.send(json.dumps({"id": 2, "type": "subscribe_events", "event_type": "state_changed"}))
+                    async for raw in ws:
+                        m = json.loads(raw)
+                        if m.get("type") == "result":
+                            mid = m.get("id")
+                            if mid == 1:
+                                for s in m.get("result") or []:
+                                    self.states[s["entity_id"]] = s
+                                for key, c in self.clients.items():
+                                    self.send_snapshot(key, c["entities"])
+                            elif mid in self.pending:
+                                fut = self.pending.pop(mid)
+                                if not fut.done():
+                                    fut.set_result(m)
+                        elif m.get("type") == "event":
+                            data = m["event"]["data"]
+                            new, old = data.get("new_state"), data.get("old_state")
+                            if not new:
+                                continue
+                            eid = new["entity_id"]
+                            self.states[eid] = new
+                            if old and old.get("state") == new.get("state") and twin_attrs(old) == twin_attrs(new):
+                                continue  # attribute noise
+                            msg = None
+                            for key, c in self.clients.items():
+                                if eid in c["entities"]:
+                                    msg = msg or make_msg("change", new, old)
+                                    self.send(msg, key)
+                            if msg:
+                                log(f"-> {eid} = {new.get('state')}")
+            except (OSError, websockets.ConnectionClosed, asyncio.TimeoutError) as e:
+                log(f"Home Assistant connection lost ({e}); retrying in 3 s")
+            finally:
+                self.ws, self.ha_ok = None, False
+                for fut in self.pending.values():
+                    if not fut.done():
+                        fut.set_exception(ConnectionError("Home Assistant disconnected"))
+                self.pending.clear()
+            await asyncio.sleep(3)
+
+    async def run(self):
+        loop = asyncio.get_running_loop()
+        self.transport, _ = await loop.create_datagram_endpoint(
+            lambda: UdpProtocol(self), local_addr=("0.0.0.0", self.args.port))
+        try:
+            ips = sorted({i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)})
+        except OSError:
+            ips = []
+        log(f"bridge listening on UDP :{self.args.port}  (this laptop: {', '.join(ips) or '?'})")
+        log("start RedLab Twin on the headset; it finds this bridge by itself")
+        await asyncio.gather(self.ha_loop(), self.heartbeat_loop())
+
+
+def main():
+    p = argparse.ArgumentParser(description="Relay Home Assistant <-> RedLab Twin on a standalone headset.")
+    p.add_argument("--url", default="http://homeassistant.local:8123", help="Home Assistant URL")
+    p.add_argument("--token", default=os.environ.get("HA_TOKEN"), help="Long-lived token (default: HA_TOKEN env var)")
+    p.add_argument("--port", type=int, default=5006, help="UDP port the headset sends to (default 5006)")
+    args = p.parse_args()
+    if not args.token:
+        sys.exit("No token. Set HA_TOKEN or pass --token.")
+    try:
+        asyncio.run(Bridge(args).run())
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

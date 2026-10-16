@@ -15262,7 +15262,7 @@ MonoBehaviour:
   thermostat: {fileID: 1803246405}
   beacon: {fileID: 1668211893}
   strip: {fileID: 442689691}
-  highC: 25
+  highC: 24.5
   alarmOnTarget: 1
   keepLights: []
   alarmAmbient: {r: 0.22, g: 0.02, b: 0.02, a: 1}
